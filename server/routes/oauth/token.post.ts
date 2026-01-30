@@ -17,6 +17,14 @@ export default defineEventHandler(async (event) => {
         body = await readBody(event)
     }
 
+    console.log('[Token] 收到请求:', {
+        contentType,
+        grantType: body.grant_type,
+        code: body.code?.substring(0, 8) + '...',
+        clientId: body.client_id,
+        redirectUri: body.redirect_uri,
+    })
+
     const grantType = body.grant_type
     const code = body.code
     const redirectUri = body.redirect_uri
@@ -44,12 +52,15 @@ export default defineEventHandler(async (event) => {
     // 获取并验证授权码
     const authData = getAuthCode(code as string)
     if (!authData) {
+        console.error('[Token] 授权码无效或已过期:', code?.substring(0, 8) + '...')
         setResponseStatus(event, 400)
         return {
             error: 'invalid_grant',
             error_description: 'Authorization code is invalid or expired',
         }
     }
+
+    console.log('[Token] 授权码验证成功，用户:', authData.userId)
 
     // 验证 redirect_uri
     if (authData.redirectUri !== redirectUri) {
