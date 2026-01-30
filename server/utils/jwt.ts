@@ -40,7 +40,13 @@ function base64UrlDecode(str: string): string {
 }
 
 function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
-    return base64UrlEncode(String.fromCharCode(...new Uint8Array(buffer)))
+    // 直接将二进制数据转换为 base64，不经过 UTF-8 编码
+    const bytes = new Uint8Array(buffer)
+    const binaryString = String.fromCharCode(...bytes)
+    return btoa(binaryString)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '')
 }
 
 async function rsaSign(data: string, privateKey: CryptoKey): Promise<string> {
@@ -102,6 +108,7 @@ export async function verifySimpleJwt<T = any>(
     try {
         const parts = token.split('.')
         if (parts.length !== 3) {
+            console.error('[JWT] Token 格式错误，部分数量:', parts.length)
             return null
         }
 
@@ -126,6 +133,7 @@ export async function verifySimpleJwt<T = any>(
         )
 
         if (!valid) {
+            console.error('[JWT] 签名验证失败')
             return null
         }
 
@@ -134,11 +142,13 @@ export async function verifySimpleJwt<T = any>(
 
         // 检查过期时间
         if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+            console.error('[JWT] Token 已过期, exp:', payload.exp, 'now:', Math.floor(Date.now() / 1000))
             return null
         }
 
         return payload as T
-    } catch {
+    } catch (error) {
+        console.error('[JWT] 验证失败:', error)
         return null
     }
 }
