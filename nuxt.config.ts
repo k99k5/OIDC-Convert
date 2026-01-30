@@ -1,7 +1,9 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-    compatibilityDate: '2024-11-01',
-    devtools: {enabled: true},
+    compatibilityDate: '2026-01-01',
+    devtools: {
+        enabled: false,
+    },
 
     // 运行时配置
     runtimeConfig: {
@@ -22,9 +24,6 @@ export default defineNuxtConfig({
             baseUrl: 'http://localhost:3000',
         },
     },
-
-    // 仅服务端模式
-    ssr: true,
 
     vite: {
         server: {
