@@ -1,8 +1,10 @@
 import type {StandardUserInfo} from '../types/qq'
+import {getKeyId, getPrivateKey, initKeys} from './keys'
 
 interface JwtHeader {
     alg: string
     typ: string
+    kid?: string
 }
 
 interface IdTokenPayload {
@@ -22,31 +24,33 @@ function base64UrlEncode(str: string): string {
         .replace(/=+$/, '')
 }
 
-async function hmacSign(data: string, secret: string): Promise<string> {
+function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
+    return base64UrlEncode(String.fromCharCode(...new Uint8Array(buffer)))
+}
+
+async function rsaSign(data: string, privateKey: CryptoKey): Promise<string> {
     const encoder = new TextEncoder()
-    const key = await crypto.subtle.importKey(
-        'raw',
-        encoder.encode(secret),
-        {name: 'HMAC', hash: 'SHA-256'},
-        false,
-        ['sign']
+    const signature = await crypto.subtle.sign(
+        'RSASSA-PKCS1-v1_5',
+        privateKey,
+        encoder.encode(data)
     )
-    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data))
-    return base64UrlEncode(String.fromCharCode(...new Uint8Array(signature)))
+    return arrayBufferToBase64Url(signature)
 }
 
 export async function createIdToken(
     userInfo: StandardUserInfo,
     issuer: string,
     audience: string,
-    secret: string,
     expiresIn = 3600
 ): Promise<string> {
+    await initKeys()
     const now = Math.floor(Date.now() / 1000)
 
     const header: JwtHeader = {
-        alg: 'HS256',
+        alg: 'RS256',
         typ: 'JWT',
+        kid: getKeyId(),
     }
 
     const payload: IdTokenPayload = {
@@ -61,7 +65,7 @@ export async function createIdToken(
 
     const headerB64 = base64UrlEncode(JSON.stringify(header))
     const payloadB64 = base64UrlEncode(JSON.stringify(payload))
-    const signature = await hmacSign(`${headerB64}.${payloadB64}`, secret)
+    const signature = await rsaSign(`${headerB64}.${payloadB64}`, getPrivateKey())
 
     return `${headerB64}.${payloadB64}.${signature}`
 }

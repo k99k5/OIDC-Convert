@@ -56,8 +56,7 @@ export default defineEventHandler(async (event) => {
     const idToken = await createIdToken(
         authData.userInfo,
         config.public.baseUrl,
-        clientId,
-        config.oauth.jwtSecret
+        clientId
     )
 
     return {
