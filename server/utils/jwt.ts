@@ -18,7 +18,10 @@ interface IdTokenPayload {
 }
 
 function base64UrlEncode(str: string): string {
-    return btoa(str)
+    // 先转换为 UTF-8 字节，再进行 base64 编码
+    const utf8Bytes = new TextEncoder().encode(str)
+    const binaryString = String.fromCharCode(...utf8Bytes)
+    return btoa(binaryString)
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=+$/, '')
@@ -30,7 +33,10 @@ function base64UrlDecode(str: string): string {
     while (str.length % 4) {
         str += '='
     }
-    return atob(str)
+    // 先 base64 解码，再从 UTF-8 字节转换为字符串
+    const binaryString = atob(str)
+    const bytes = Uint8Array.from(binaryString, c => c.charCodeAt(0))
+    return new TextDecoder().decode(bytes)
 }
 
 function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
