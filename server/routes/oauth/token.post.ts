@@ -3,7 +3,19 @@ import {createIdToken} from '../../utils/jwt'
 
 export default defineEventHandler(async (event) => {
     const config = useRuntimeConfig()
-    const body = await readBody(event)
+
+    // 支持 application/x-www-form-urlencoded 和 application/json
+    const contentType = getHeader(event, 'content-type') || ''
+    let body: Record<string, string>
+
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+        const rawBody = await readBody(event)
+        body = typeof rawBody === 'string'
+            ? Object.fromEntries(new URLSearchParams(rawBody))
+            : rawBody
+    } else {
+        body = await readBody(event)
+    }
 
     const grantType = body.grant_type
     const code = body.code
@@ -13,35 +25,39 @@ export default defineEventHandler(async (event) => {
 
     // 验证 grant_type
     if (grantType !== 'authorization_code') {
-        throw createError({
-            statusCode: 400,
-            message: 'unsupported_grant_type',
-        })
+        setResponseStatus(event, 400)
+        return {
+            error: 'unsupported_grant_type',
+            error_description: 'Only authorization_code is supported',
+        }
     }
 
     // 验证 client 凭证
     if (clientId !== config.oauth.clientId || clientSecret !== config.oauth.clientSecret) {
-        throw createError({
-            statusCode: 401,
-            message: 'invalid_client',
-        })
+        setResponseStatus(event, 401)
+        return {
+            error: 'invalid_client',
+            error_description: 'Client authentication failed',
+        }
     }
 
     // 获取并验证授权码
-    const authData = getAuthCode(code)
+    const authData = getAuthCode(code as string)
     if (!authData) {
-        throw createError({
-            statusCode: 400,
-            message: 'invalid_grant',
-        })
+        setResponseStatus(event, 400)
+        return {
+            error: 'invalid_grant',
+            error_description: 'Authorization code is invalid or expired',
+        }
     }
 
     // 验证 redirect_uri
     if (authData.redirectUri !== redirectUri) {
-        throw createError({
-            statusCode: 400,
-            message: 'invalid_grant: redirect_uri mismatch',
-        })
+        setResponseStatus(event, 400)
+        return {
+            error: 'invalid_grant',
+            error_description: 'redirect_uri mismatch',
+        }
     }
 
     // 生成 access_token
