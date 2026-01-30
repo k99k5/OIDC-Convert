@@ -68,14 +68,19 @@ export default defineEventHandler(async (event) => {
 
         // 6. 如果是 OAuth 流程，生成授权码并重定向
         if (oauthState?.redirectUri) {
-            const authCode = generateCode()
-            saveAuthCode(authCode, {
+            const authCodeData = {
                 userId: openId,
                 userInfo: result,
                 clientId: oauthState.clientId,
                 redirectUri: oauthState.redirectUri,
                 scope: oauthState.scope,
-            })
+            }
+
+            const authCode = await generateCode(authCodeData, config.oauth.jwtSecret)
+            console.log('[QQ Callback] 生成授权码:', authCode.substring(0, 20) + '...', '用户:', openId)
+
+            saveAuthCode(authCode, authCodeData)
+            console.log('[QQ Callback] 授权码已保存，重定向到:', oauthState.redirectUri)
 
             const redirectUrl = new URL(oauthState.redirectUri)
             redirectUrl.searchParams.set('code', authCode)

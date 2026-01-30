@@ -50,9 +50,9 @@ export default defineEventHandler(async (event) => {
     }
 
     // 获取并验证授权码
-    const authData = getAuthCode(code as string)
+    const authData = await getAuthCode(code as string, config.oauth.jwtSecret)
     if (!authData) {
-        console.error('[Token] 授权码无效或已过期:', code?.substring(0, 8) + '...')
+        console.error('[Token] 授权码无效或已过期:', code?.substring(0, 20) + '...')
         setResponseStatus(event, 400)
         return {
             error: 'invalid_grant',
@@ -72,12 +72,13 @@ export default defineEventHandler(async (event) => {
     }
 
     // 生成 access_token
-    const accessToken = generateToken()
-    saveAccessToken(accessToken, {
+    const tokenData = {
         userId: authData.userId,
         userInfo: authData.userInfo,
         scope: authData.scope,
-    })
+    }
+    const accessToken = await generateToken(tokenData, config.oauth.jwtSecret)
+    saveAccessToken(accessToken, tokenData)
 
     // 生成 id_token
     const idToken = await createIdToken(

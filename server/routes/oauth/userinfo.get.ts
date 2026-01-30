@@ -1,6 +1,7 @@
 import {getStoredToken} from '../../utils/store'
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
+    const config = useRuntimeConfig()
     const authHeader = getHeader(event, 'authorization')
 
     console.log('[UserInfo] 收到请求，Authorization header:', authHeader ? '存在' : '缺失')
@@ -14,9 +15,9 @@ export default defineEventHandler((event) => {
     }
 
     const token = authHeader.slice(7)
-    console.log('[UserInfo] Token:', token.substring(0, 8) + '...')
+    console.log('[UserInfo] Token:', token.substring(0, 20) + '...')
 
-    const tokenData = getStoredToken(token)
+    const tokenData = await getStoredToken(token, config.oauth.jwtSecret)
 
     if (!tokenData) {
         console.error('[UserInfo] Token 无效或已过期')

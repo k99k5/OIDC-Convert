@@ -1,4 +1,5 @@
 import type {StandardUserInfo} from '../types/qq'
+import {createSimpleJwt, verifySimpleJwt} from './jwt'
 
 // 授权码信息
 interface AuthCodeData {
@@ -7,7 +8,6 @@ interface AuthCodeData {
     clientId: string
     redirectUri: string
     scope: string
-    createdAt: number
 }
 
 // Token 信息
@@ -15,70 +15,82 @@ interface TokenData {
     userId: string
     userInfo: StandardUserInfo
     scope: string
-    createdAt: number
-    expiresAt: number
 }
 
-// 内存存储（生产环境应使用 Redis）
-const authCodes = new Map<string, AuthCodeData>()
-const accessTokens = new Map<string, TokenData>()
+// 授权码有效期：10 分钟（秒）
+const CODE_EXPIRES_IN = 10 * 60
+// Token 有效期：1 小时（秒）
+const TOKEN_EXPIRES_IN = 60 * 60
 
-// 授权码有效期：10 分钟
-const CODE_EXPIRES_IN = 10 * 60 * 1000
-// Token 有效期：1 小时
-const TOKEN_EXPIRES_IN = 60 * 60 * 1000
-
-export function generateCode(): string {
-    return crypto.randomUUID()
+/**
+ * 生成授权码（JWT 格式，自包含数据）
+ */
+export async function generateCode(
+    data: AuthCodeData,
+    secret: string
+): Promise<string> {
+    return await createSimpleJwt(data, secret, CODE_EXPIRES_IN)
 }
 
-export function generateToken(): string {
-    return crypto.randomUUID()
+/**
+ * 生成 access token（JWT 格式，自包含数据）
+ */
+export async function generateToken(
+    data: TokenData,
+    secret: string
+): Promise<string> {
+    return await createSimpleJwt(data, secret, TOKEN_EXPIRES_IN)
 }
 
-export function saveAuthCode(
+/**
+ * 保存授权码（JWT 方案下不需要实际保存，仅用于日志）
+ */
+export function saveAuthCode(code: string, data: AuthCodeData): void {
+    console.log('[Store] 生成授权码 JWT:', code.substring(0, 20) + '...')
+}
+
+/**
+ * 验证并获取授权码数据（从 JWT 中解析）
+ */
+export async function getAuthCode(
     code: string,
-    data: Omit<AuthCodeData, 'createdAt'>
-): void {
-    authCodes.set(code, {...data, createdAt: Date.now()})
-}
+    secret: string
+): Promise<AuthCodeData | null> {
+    console.log('[Store] 验证授权码 JWT:', code.substring(0, 20) + '...')
 
-export function getAuthCode(code: string): AuthCodeData | null {
-    const data = authCodes.get(code)
-    if (!data) return null
-
-    // 检查是否过期
-    if (Date.now() - data.createdAt > CODE_EXPIRES_IN) {
-        authCodes.delete(code)
+    const data = await verifySimpleJwt<AuthCodeData>(code, secret)
+    if (!data) {
+        console.error('[Store] 授权码无效或已过期')
         return null
     }
 
-    // 使用后删除（一次性）
-    authCodes.delete(code)
+    console.log('[Store] 授权码验证成功，用户:', data.userId)
     return data
 }
 
-export function saveAccessToken(
-    token: string,
-    data: Omit<TokenData, 'createdAt' | 'expiresAt'>
-): void {
-    const now = Date.now()
-    accessTokens.set(token, {
-        ...data,
-        createdAt: now,
-        expiresAt: now + TOKEN_EXPIRES_IN,
-    })
+/**
+ * 保存 access token（JWT 方案下不需要实际保存，仅用于日志）
+ */
+export function saveAccessToken(token: string, data: TokenData): void {
+    console.log('[Store] 生成 access token JWT:', token.substring(0, 20) + '...')
 }
 
-export function getStoredToken(token: string): TokenData | null {
-    const data = accessTokens.get(token)
-    if (!data) return null
+/**
+ * 验证并获取 token 数据（从 JWT 中解析）
+ */
+export async function getStoredToken(
+    token: string,
+    secret: string
+): Promise<TokenData | null> {
+    console.log('[Store] 验证 access token JWT:', token.substring(0, 20) + '...')
 
-    if (Date.now() > data.expiresAt) {
-        accessTokens.delete(token)
+    const data = await verifySimpleJwt<TokenData>(token, secret)
+    if (!data) {
+        console.error('[Store] Token 无效或已过期')
         return null
     }
 
+    console.log('[Store] Token 验证成功，用户:', data.userId)
     return data
 }
 

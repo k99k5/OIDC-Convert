@@ -24,6 +24,15 @@ function base64UrlEncode(str: string): string {
         .replace(/=+$/, '')
 }
 
+function base64UrlDecode(str: string): string {
+    // 补齐 padding
+    str = str.replace(/-/g, '+').replace(/_/g, '/')
+    while (str.length % 4) {
+        str += '='
+    }
+    return atob(str)
+}
+
 function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
     return base64UrlEncode(String.fromCharCode(...new Uint8Array(buffer)))
 }
@@ -36,6 +45,96 @@ async function rsaSign(data: string, privateKey: CryptoKey): Promise<string> {
         encoder.encode(data)
     )
     return arrayBufferToBase64Url(signature)
+}
+
+/**
+ * 使用 HMAC-SHA256 创建简单的 JWT（用于授权码和 access token）
+ */
+export async function createSimpleJwt(
+    payload: Record<string, any>,
+    secret: string,
+    expiresIn: number
+): Promise<string> {
+    const now = Math.floor(Date.now() / 1000)
+    const fullPayload = {
+        ...payload,
+        iat: now,
+        exp: now + expiresIn,
+    }
+
+    const header = { alg: 'HS256', typ: 'JWT' }
+    const headerB64 = base64UrlEncode(JSON.stringify(header))
+    const payloadB64 = base64UrlEncode(JSON.stringify(fullPayload))
+
+    // 使用 HMAC-SHA256 签名
+    const encoder = new TextEncoder()
+    const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(secret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    )
+
+    const signature = await crypto.subtle.sign(
+        'HMAC',
+        key,
+        encoder.encode(`${headerB64}.${payloadB64}`)
+    )
+
+    const signatureB64 = arrayBufferToBase64Url(signature)
+    return `${headerB64}.${payloadB64}.${signatureB64}`
+}
+
+/**
+ * 验证并解析简单的 JWT
+ */
+export async function verifySimpleJwt<T = any>(
+    token: string,
+    secret: string
+): Promise<T | null> {
+    try {
+        const parts = token.split('.')
+        if (parts.length !== 3) {
+            return null
+        }
+
+        const [headerB64, payloadB64, signatureB64] = parts
+
+        // 验证签名
+        const encoder = new TextEncoder()
+        const key = await crypto.subtle.importKey(
+            'raw',
+            encoder.encode(secret),
+            { name: 'HMAC', hash: 'SHA-256' },
+            false,
+            ['verify']
+        )
+
+        const signature = Uint8Array.from(atob(signatureB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
+        const valid = await crypto.subtle.verify(
+            'HMAC',
+            key,
+            signature,
+            encoder.encode(`${headerB64}.${payloadB64}`)
+        )
+
+        if (!valid) {
+            return null
+        }
+
+        // 解析 payload
+        const payload = JSON.parse(base64UrlDecode(payloadB64))
+
+        // 检查过期时间
+        if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+            return null
+        }
+
+        return payload as T
+    } catch {
+        return null
+    }
 }
 
 export async function createIdToken(
